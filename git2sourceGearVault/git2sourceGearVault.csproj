@@ -1,5 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <Import Project="..\packages\LibGit2Sharp.NativeBinaries.2.0.306\build\net46\LibGit2Sharp.NativeBinaries.props" Condition="Exists('..\packages\LibGit2Sharp.NativeBinaries.2.0.306\build\net46\LibGit2Sharp.NativeBinaries.props')" />
     <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
     <PropertyGroup>
         <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -41,6 +42,10 @@
         </Reference>
         <Reference Include="VaultClientOperationsLib, Version=6.1.0.531, Culture=neutral, PublicKeyToken=e372e94840f8a4d3">
           <HintPath>..\VaultClientLibV6.1\VaultClientOperationsLib.dll</HintPath>
+        </Reference>
+        <PackageReference Include="LibGit2Sharp" Version="0.26.2" />
+        <Reference Include="VaultLib, Version=6.1.0.531, Culture=neutral, PublicKeyToken=a74d7badb9387c36">
+          <HintPath>..\VaultClientLibV6.1\VaultLib.dll</HintPath>
         </Reference>
     </ItemGroup>
     <ItemGroup>
