@@ -1,7 +1,7 @@
 ﻿﻿using System;
 using System.Collections.Generic;
- using System.IO;
- using System.Linq;
+using System.IO;
+using System.Linq;
 using VaultClientIntegrationLib;
 using VaultClientOperationsLib;
 
@@ -12,9 +12,6 @@ namespace git2sourceGearVault
         private readonly string _vaultServer;
         private readonly string _repoFolder;
         private readonly string _workingFolder;
-        
-        private readonly ChangeSetItemColl _changes = new ChangeSetItemColl();
-        private readonly HashSet<string> _repoDirsToDelete = new HashSet<string>();
 
         public VaultConnection(string vaultServerIp, string repoFolder, string workingFolder)
         {
@@ -35,21 +32,11 @@ namespace git2sourceGearVault
             Console.WriteLine("Getting from SourceGear");
             GetOperations.ProcessCommandGet(new []{_repoFolder}, getOptions);
         }
-        
-        public void AddFile(string repoPath, params string[] diskPaths) => _changes.AddRange(ServerOperations.ProcessCommandAdd(repoPath, diskPaths));
-
-        public void DetectModifiedAndDeletedFiles()
-        {
-            _repoDirsToDelete.Clear();
-            var folder = ServerOperations.ProcessCommandListFolder(_repoFolder, true);
-            HandleFolderChangesRecursively(folder);
-        }
 
         public void Commit()
         {
-            var changes = RemoveDuplicatesFromChangeSet(_changes);
+            var changes = DetectChanges();
             ServerOperations.ProcessCommandCommit(changes, UnchangedHandler.Checkin, false, LocalCopyType.Leave, false);
-            _changes.Clear();
         }
 
         public void Dispose()
@@ -58,13 +45,6 @@ namespace git2sourceGearVault
             ClearChangeSet();
             ServerOperations.RemoveWorkingFolder(_repoFolder);
             ServerOperations.Logout();
-        }
-
-        public void PrintChangeSet() => Console.WriteLine($"[{nameof(PrintChangeSet)}] Change set item count: {_changes.Count}. {string.Join(", ", _changes.Cast<ChangeSetItem>().Select(csi => $"{csi.DisplayRepositoryPath}-{csi.Type}"))}");
-        public void PrintChangeSetWithoutDuplicates()
-        {
-            var changes = RemoveDuplicatesFromChangeSet(_changes);
-            Console.WriteLine($"[{nameof(PrintChangeSetWithoutDuplicates)}] Change set item count: {changes.Count}. {string.Join(", ", changes.Cast<ChangeSetItem>().Select(csi => $"{csi.DisplayRepositoryPath}-{csi.Type}"))}");
         }
 
         private void Login()
@@ -96,28 +76,69 @@ namespace git2sourceGearVault
                 ServerOperations.ProcessCommandUndoChangeSetItem(0);
             }
         }
-        
-        private void HandleFolderChangesRecursively(VaultClientFolder folder)
-        {
-            HandleFiles(folder.Files);
-            foreach (VaultClientFolder subFolder in folder.Folders)
-            {
-                HandleFolderChangesRecursively(subFolder);
-            }
 
-            if (string.Equals(_repoFolder, folder.FullPath, StringComparison.InvariantCultureIgnoreCase))
+        private ChangeSetItemColl DetectChanges()
+        {
+            var changes = new ChangeSetItemColl();
+            var folder = ServerOperations.ProcessCommandListFolder(_repoFolder, true);
+
+            HandleModifiesAndDeletes(folder, changes, true);
+            HandleAdds(folder, changes);
+
+            return RemoveDuplicatesFromChangeSet(changes);
+        }
+
+        private void HandleAdds(VaultClientFolder folder, ChangeSetItemColl changes)
+        {
+            var versionedFiles = new HashSet<string>();
+            GetAllVersionedFiles(folder, versionedFiles);
+            var versionedDiskPaths = versionedFiles.Select(MakeDiskPath).ToList();
+
+            var filesToAdd = new HashSet<string>(Directory.GetFiles(_workingFolder, "*", SearchOption.AllDirectories));
+            filesToAdd.ExceptWith(versionedDiskPaths);
+            
+            var dirToFiles = new Dictionary<string, HashSet<string>>();
+            foreach (var file in filesToAdd)
             {
+                var dir = Path.GetDirectoryName(file);
+                dir = dir.Substring(Math.Min(_workingFolder.Length + 1, dir.Length));
+                if (!dirToFiles.TryGetValue(dir, out var files))
+                {
+                    files = new HashSet<string>();
+                    dirToFiles[dir] = files;
+                }
+
+                files.Add(file);
+            }
+            Console.WriteLine($"Files to add: {string.Join(", ", filesToAdd)}");
+
+            foreach (var pair in dirToFiles)
+            {
+                var dir = pair.Key;
+                var files = pair.Value;
+
+                var repoFolder = string.IsNullOrEmpty(dir) ? _repoFolder : $"{_repoFolder}/{dir}";
+                changes.AddRange(ServerOperations.ProcessCommandAdd(repoFolder, files.ToArray()));
+            }
+        }
+        
+        private void HandleModifiesAndDeletes(VaultClientFolder folder, ChangeSetItemColl changes, bool isRepoRoot)
+        {
+            var diskPath = MakeDiskPath(folder.FullPath);
+            if (!isRepoRoot && !Directory.Exists(diskPath))
+            {
+                changes.AddRange(ServerOperations.ProcessCommandDelete(new[] {folder.FullPath}));
                 return;
             }
-
-            var diskPath = MakeDiskPath(folder.FullPath);
-            if (!Directory.Exists(diskPath))
+            
+            HandleFiles(folder.Files, changes);
+            foreach (VaultClientFolder subFolder in folder.Folders)
             {
-                _repoDirsToDelete.Add(folder.FullPath);
+                HandleModifiesAndDeletes(subFolder, changes, false);
             }
         }
 
-        private void HandleFiles(VaultClientFileColl fileColl)
+        private static void HandleFiles(VaultClientFileColl fileColl, ChangeSetItemColl changes)
         {
             var diskPaths = fileColl.Cast<VaultClientFile>().Select(x => x.FullPath).ToList();
             var statuses = ServerOperations.ProcessCommandStatus(diskPaths.ToArray());
@@ -132,13 +153,13 @@ namespace git2sourceGearVault
                         break;
                     
                     case WorkingFolderFileStatus.Missing:
-                        _changes.AddRange(ServerOperations.ProcessCommandDelete(new[] {path}));
+                        changes.AddRange(ServerOperations.ProcessCommandDelete(new[] {path}));
                         Console.WriteLine($"Deleted {path} as it was {status}");
                         break;
                     
                     case WorkingFolderFileStatus.Renegade:
                         ServerOperations.ProcessCommandCheckout(new[] {path}, false, false, new GetOptions());
-                        _changes.AddRange(ServerOperations.ProcessCommandListChangeSet(new[] {path}));
+                        changes.AddRange(ServerOperations.ProcessCommandListChangeSet(new[] {path}));
                         Console.WriteLine($"Checked out {path} as it was {status}");
                         break;
                     
@@ -156,7 +177,7 @@ namespace git2sourceGearVault
             }
         }
 
-        private ChangeSetItemColl RemoveDuplicatesFromChangeSet(ChangeSetItemColl input)
+        private static ChangeSetItemColl RemoveDuplicatesFromChangeSet(ChangeSetItemColl input)
         {
             var result = new ChangeSetItemColl();
             var dict = new Dictionary<string, ChangeSetItemType>();
@@ -165,12 +186,7 @@ namespace git2sourceGearVault
                 if (dict.TryGetValue(item.DisplayRepositoryPath, out var status))
                 {
                     if (status != item.Type) throw new Exception($"{item.DisplayRepositoryPath} has multiple statuses: {status} and {item.Type}");
-                    continue;
-                }
-
-                if (_repoDirsToDelete.Any(x => item.DisplayRepositoryPath.StartsWith(x, StringComparison.OrdinalIgnoreCase)))
-                {
-                    Console.WriteLine($"Removing {item.DisplayRepositoryPath} from change set as it is in a deleted folder");
+                    Console.WriteLine($"***** ignoring duplicate {item.DisplayRepositoryPath} - {item.Type}");
                     continue;
                 }
 
@@ -178,16 +194,28 @@ namespace git2sourceGearVault
                 result.Add(item);
             }
 
-            result.AddRange(ServerOperations.ProcessCommandDelete(_repoDirsToDelete.ToArray()));
-
             return result;
+        }
+
+        private static void GetAllVersionedFiles(VaultClientFolder folder, HashSet<string> versionedFiles)
+        {
+            foreach (VaultClientFile file in folder.Files)
+            {
+                versionedFiles.Add(file.FullPath);
+            }
+
+            foreach (VaultClientFolder subFolder in folder.Folders)
+            {
+                GetAllVersionedFiles(subFolder, versionedFiles);
+            }
         }
 
         private string MakeDiskPath(string repoPath)
         {
             if (!repoPath.StartsWith(_repoFolder, StringComparison.InvariantCultureIgnoreCase)) throw new Exception($"Path {repoPath} doesn't start with {_repoFolder}");
             var suffix = repoPath.Substring(_repoFolder.Length);
-            return _workingFolder + suffix;
+            var result = _workingFolder + suffix;
+            return result.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
         }
     }
 }

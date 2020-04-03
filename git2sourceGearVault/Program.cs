@@ -22,17 +22,13 @@ namespace git2sourceGearVault
                     {
                         vaultConnection.Get();
                         Console.WriteLine();
-
-                        vaultConnection.DetectModifiedAndDeletedFiles();
-                        vaultConnection.PrintChangeSet();
-                        Console.WriteLine();
                     
-                        Directory.Delete(Path.Combine(TempWorkingFolder, "just_a_folder"), true);
-                        File.Delete(Path.Combine(TempWorkingFolder, "another_folder", "another_file1.txt"));
-                        vaultConnection.DetectModifiedAndDeletedFiles();
-                        vaultConnection.PrintChangeSet();
-                        Console.WriteLine();
-
+                        Directory.Delete(Path.Combine(TempWorkingFolder, "hablaty"), true);
+                        File.Delete(Path.Combine(TempWorkingFolder, "another_folder", "another_file2.txt"));
+                        Directory.CreateDirectory(Path.Combine(TempWorkingFolder, "asdf1"));
+                        File.WriteAllText(Path.Combine(TempWorkingFolder, "asdf1", "detect.txt"), "detect this");
+                        File.WriteAllText(Path.Combine(TempWorkingFolder, "file3.txt"), "sdf new content asd");
+                        
                         vaultConnection.Commit();
                     }
                     catch (Exception e)
