@@ -119,7 +119,6 @@ namespace git2sourceGearVault
 
                 files.Add(file);
             }
-            Console.WriteLine($"Files to add: {string.Join(", ", filesToAdd)}");
 
             foreach (var pair in dirToFiles)
             {
@@ -127,6 +126,7 @@ namespace git2sourceGearVault
                 var files = pair.Value;
 
                 var repoFolder = string.IsNullOrEmpty(dir) ? _repoFolder : $"{_repoFolder}/{dir}";
+                repoFolder = repoFolder.Replace('\\', '/');
                 changes.AddRange(ServerOperations.ProcessCommandAdd(repoFolder, files.ToArray()));
             }
         }
