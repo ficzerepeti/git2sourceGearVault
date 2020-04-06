@@ -12,12 +12,18 @@ namespace git2sourceGearVault
         private readonly string _vaultServer;
         private readonly string _repoFolder;
         private readonly string _workingFolder;
+        private readonly string _vaultRepository;
+        private readonly string _user;
+        private readonly string _password;
 
-        public VaultConnection(string vaultServerIp, string repoFolder, string workingFolder)
+        public VaultConnection(string vaultServerIp, string repoFolder, string workingFolder, string vaultRepository, string user, string password)
         {
             _vaultServer = vaultServerIp;
             _repoFolder = repoFolder;
             _workingFolder = workingFolder;
+            _vaultRepository = vaultRepository;
+            _user = user;
+            _password = password;
 
             Login();
             ClearChangeSet();
@@ -36,6 +42,7 @@ namespace git2sourceGearVault
         public void Commit()
         {
             var changes = DetectChanges();
+            Console.WriteLine($"[{nameof(Commit)}] Committing the following changes: {changes}");
             ServerOperations.ProcessCommandCommit(changes, UnchangedHandler.Checkin, false, LocalCopyType.Leave, false);
         }
 
@@ -50,7 +57,7 @@ namespace git2sourceGearVault
         private void Login()
         {
             Console.WriteLine($"About to log in to {_vaultServer}");
-            ServerOperations.SetLoginOptions($"http://{_vaultServer}/VaultService", "TestGit2SourceGear", "123456", "Hardcastle Source", false);
+            ServerOperations.SetLoginOptions($"http://{_vaultServer}/VaultService", _user, _password, _vaultRepository, false);
             ServerOperations.Login();
             Console.WriteLine("Connected");
                 
@@ -70,11 +77,13 @@ namespace git2sourceGearVault
             var lcs = ServerOperations.ProcessCommandListChangeSet(new[] {_repoFolder});
             if (lcs.Count <= 0) return;
 
-            Console.WriteLine($"Removing {lcs.Count} item(s) from change set");
+            Console.Write($"Removing {lcs.Count} item(s) from change set");
             foreach (var _ in lcs)
             {
                 ServerOperations.ProcessCommandUndoChangeSetItem(0);
+                Console.Write('.');
             }
+            Console.WriteLine();
         }
 
         private ChangeSetItemColl DetectChanges()
