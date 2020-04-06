@@ -101,7 +101,7 @@ namespace git2sourceGearVault
             
             vaultConnection.Get();
             DeleteAllFilesAndSubdirs(vaultWorkingDir);
-            FileSystemGetter.Get(sourcePath, vaultWorkingDir, ".git");
+            FileSystemGetter.Get(sourcePath, vaultWorkingDir, ".git", ".idea", ".vs");
             vaultConnection.Commit();
 
             return 0;
