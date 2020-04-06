@@ -26,7 +26,6 @@ namespace git2sourceGearVault
             _password = password;
 
             Login();
-            ClearChangeSet();
         }
 
         public void Get()
@@ -41,7 +40,16 @@ namespace git2sourceGearVault
 
         public void Commit()
         {
+            ClearChangeSet();
+            
             var changes = DetectChanges();
+            
+            Console.WriteLine("Merging Vault Lib change set with ours as sometimes files after edit are renegades, sometimes edited...");
+            changes.AddRange(ServerOperations.ProcessCommandListChangeSet(new[] {_repoFolder}));
+            ClearChangeSet();
+            
+            changes = RemoveDuplicatesFromChangeSet(changes);
+            
             Console.WriteLine($"[{nameof(Commit)}] Committing the following changes: {changes}");
             ServerOperations.ProcessCommandCommit(changes, UnchangedHandler.Checkin, false, LocalCopyType.Leave, false);
         }
@@ -77,7 +85,7 @@ namespace git2sourceGearVault
             var lcs = ServerOperations.ProcessCommandListChangeSet(new[] {_repoFolder});
             if (lcs.Count <= 0) return;
 
-            Console.Write($"Removing {lcs.Count} item(s) from change set");
+            Console.Write($"Removing {lcs.Count} item(s) from change set. {string.Join(", ", lcs.Cast<ChangeSetItem>())}");
             foreach (var _ in lcs)
             {
                 ServerOperations.ProcessCommandUndoChangeSetItem(0);
@@ -88,13 +96,14 @@ namespace git2sourceGearVault
 
         private ChangeSetItemColl DetectChanges()
         {
+            Console.WriteLine("Detecting changes");
             var changes = new ChangeSetItemColl();
             var folder = ServerOperations.ProcessCommandListFolder(_repoFolder, true);
 
             HandleModifiesAndDeletes(folder, changes, true);
             HandleAdds(folder, changes);
 
-            return RemoveDuplicatesFromChangeSet(changes);
+            return changes;
         }
 
         private void HandleAdds(VaultClientFolder folder, ChangeSetItemColl changes)
@@ -168,7 +177,6 @@ namespace git2sourceGearVault
                     
                     case WorkingFolderFileStatus.Renegade:
                         ServerOperations.ProcessCommandCheckout(new[] {path}, false, false, new GetOptions());
-                        changes.AddRange(ServerOperations.ProcessCommandListChangeSet(new[] {path}));
                         Console.WriteLine($"Checked out {path} as it was {status}");
                         break;
                     
@@ -188,6 +196,7 @@ namespace git2sourceGearVault
 
         private static ChangeSetItemColl RemoveDuplicatesFromChangeSet(ChangeSetItemColl input)
         {
+            Console.WriteLine("Removing duplicates");
             var result = new ChangeSetItemColl();
             var dict = new Dictionary<string, ChangeSetItemType>();
             foreach (ChangeSetItem item in input)
