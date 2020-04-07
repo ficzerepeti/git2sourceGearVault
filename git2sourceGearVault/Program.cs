@@ -12,8 +12,9 @@ namespace git2sourceGearVault
         public string VaultUser { get; private set; }
         public string VaultPassword { get; private set; }
         public string WorkDir { get; private set; }
-        
-        public VaultParams(string commandName, string description)
+        public string Label { get; private set; }
+
+        protected VaultParams(string commandName, string description)
         {
             IsCommand(commandName, description);
             HasRequiredOption(nameof(VaultServerIp) + '=', "", v => VaultServerIp = v);
@@ -22,6 +23,7 @@ namespace git2sourceGearVault
             HasRequiredOption(nameof(VaultUser) + '=', "", v => VaultUser = v);
             HasRequiredOption(nameof(VaultPassword) + '=', "", v => VaultPassword = v);
             HasRequiredOption(nameof(WorkDir) + '=', "Working directory where this app puts its files. Expected to be empty", v => WorkDir = v);
+            HasOption(nameof(Label) + '=', "Label to apply after committing changes", v => Label = v);
         }
 
         protected void AssertWorkDirIsInGoodState()
@@ -102,7 +104,12 @@ namespace git2sourceGearVault
             vaultConnection.Get();
             DeleteAllFilesAndSubdirs(vaultWorkingDir);
             FileSystemGetter.Get(sourcePath, vaultWorkingDir, ".git", ".idea", ".vs");
-            vaultConnection.Commit();
+            var committedCount = vaultConnection.Commit();
+
+            if (committedCount > 0 && !string.IsNullOrEmpty(options.Label))
+            {
+                vaultConnection.Label(options.Label);
+            }
 
             return 0;
         }

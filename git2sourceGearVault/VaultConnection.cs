@@ -4,8 +4,9 @@ using System.IO;
 using System.Linq;
 using VaultClientIntegrationLib;
 using VaultClientOperationsLib;
+ using VaultLib;
 
-namespace git2sourceGearVault
+ namespace git2sourceGearVault
 {
     public class VaultConnection : IDisposable
     {
@@ -39,7 +40,7 @@ namespace git2sourceGearVault
             GetOperations.ProcessCommandGet(new []{_repoFolder}, getOptions);
         }
 
-        public void Commit()
+        public int Commit()
         {
             var changes = DetectChanges();
             
@@ -49,12 +50,18 @@ namespace git2sourceGearVault
             changes = RemoveDuplicatesFromChangeSet(changes);
             
             Console.WriteLine($"[{nameof(Commit)}] Attempting to commit the following changes: {changes}");
+            var attemptedCount = changes.Count;
             ServerOperations.ProcessCommandCommit(changes, UnchangedHandler.UndoCheckout, false, LocalCopyType.Leave, false, false, out var csicRemove);
             if (csicRemove != null && csicRemove.Count > 0)
             {
                 Console.Error.WriteLine($"[{nameof(Commit)}] Failed to commit the following items: {string.Join(", ", csicRemove)}");
+                return attemptedCount - csicRemove.Count;
             }
+
+            return attemptedCount;
         }
+
+        public void Label(string label) => ServerOperations.ProcessCommandLabel(_repoFolder, label, VaultDefine.Latest);
 
         public void Dispose()
         {
