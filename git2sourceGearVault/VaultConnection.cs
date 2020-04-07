@@ -26,6 +26,7 @@ namespace git2sourceGearVault
             _password = password;
 
             Login();
+            ClearChangeSet();
         }
 
         public void Get()
@@ -40,8 +41,6 @@ namespace git2sourceGearVault
 
         public void Commit()
         {
-            ClearChangeSet();
-            
             var changes = DetectChanges();
             
             Console.WriteLine("Merging Vault Lib change set with ours as sometimes files after edit are renegades, sometimes edited...");
@@ -50,8 +49,12 @@ namespace git2sourceGearVault
             
             changes = RemoveDuplicatesFromChangeSet(changes);
             
-            Console.WriteLine($"[{nameof(Commit)}] Committing the following changes: {changes}");
-            ServerOperations.ProcessCommandCommit(changes, UnchangedHandler.Checkin, false, LocalCopyType.Leave, false);
+            Console.WriteLine($"[{nameof(Commit)}] Attempting to commit the following changes: {changes}");
+            ServerOperations.ProcessCommandCommit(changes, UnchangedHandler.UndoCheckout, false, LocalCopyType.Leave, false, false, out var csicRemove);
+            if (csicRemove != null && csicRemove.Count > 0)
+            {
+                Console.Error.WriteLine($"[{nameof(Commit)}] Failed to commit the following items: {string.Join(", ", csicRemove)}");
+            }
         }
 
         public void Dispose()
@@ -72,6 +75,7 @@ namespace git2sourceGearVault
             ServerOperations.client.MakeBackups = false;
             ServerOperations.client.AutoCommit = false;
             ServerOperations.client.Verbose = true;
+            ServerOperations.client.ClientInstance.WorkingFolderOptions.RequireCheckOutBeforeCheckIn = false;
                 
             Console.WriteLine($"Setting working folder to {_workingFolder}");
             ServerOperations.RemoveWorkingFolder(_repoFolder);
