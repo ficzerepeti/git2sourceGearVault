@@ -45,7 +45,6 @@ namespace git2sourceGearVault
             
             Console.WriteLine("Merging Vault Lib change set with ours as sometimes files after edit are renegades, sometimes edited...");
             changes.AddRange(ServerOperations.ProcessCommandListChangeSet(new[] {_repoFolder}));
-            ClearChangeSet();
             
             changes = RemoveDuplicatesFromChangeSet(changes);
             
